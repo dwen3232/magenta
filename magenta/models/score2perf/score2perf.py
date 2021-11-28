@@ -49,6 +49,18 @@ MAESTRO_TFRECORD_PATHS = {
 }
 # pylint: enable=line-too-long
 
+### ADDED BY DAVID HERE
+
+# pylint: disable=line-too-long
+VIP_TFRECORD_PATHS = {
+    'train': 'gs://vip-bucket/datasets/jazz1/train.tfrecord',
+    # TODO: add dev and test sets
+    # 'dev': 'gs://magentadata/datasets/maestro/v1.0.0/maestro-v1.0.0_validation.tfrecord',
+    # 'test': 'gs://magentadata/datasets/maestro/v1.0.0/maestro-v1.0.0_test.tfrecord'
+}
+# pylint: enable=line-too-long
+
+### ADDED BY DAVID END
 
 # Beam input transform for MAESTRO dataset.
 def _maestro_input_transform():
@@ -57,6 +69,14 @@ def _maestro_input_transform():
       (split_name, datagen_beam.ReadNoteSequencesFromTFRecord(tfrecord_path))
       for split_name, tfrecord_path in MAESTRO_TFRECORD_PATHS.items())
 
+#### ADDED BY DAVID HERE
+def _vip_input_transform():
+  from magenta.models.score2perf import datagen_beam
+  return dict(
+      (split_name, datagen_beam.ReadNoteSequencesFromTFRecord(tfrecord_path))
+      for split_name, tfrecord_path in VIP_TFRECORD_PATHS.items())
+
+### ADDED BY DAVID END
 
 class Score2PerfProblem(problem.Problem):
   """Base class for musical score-to-performance problems.
@@ -669,6 +689,53 @@ class Score2PerfMaestroPerfConditionalAug10x(ConditionalScore2PerfProblem):
             add_eos=self.add_eos_symbol))
     ]
 
+### ADDED BY DAVID HERE
+@registry.register_problem('score2perf_vip_perf_conditional_aug_10x')
+class Score2PerfVipPerfConditionalAug10x(ConditionalScore2PerfProblem):
+  """Generate performances from scratch (or from primer)."""
+
+  def performances_input_transform(self, tmp_dir):
+    del tmp_dir
+    return _vip_input_transform()
+
+  @property
+  def splits(self):
+    return
+
+  @property
+  def num_replications(self):
+    return 10
+
+  @property
+  def add_eos_symbol(self):
+    return False
+
+  @property
+  def stretch_factors(self):
+    # Stretch by -5%, -2.5%, 0%, 2.5%, and 5%.
+    return [0.95, 0.975, 1.0, 1.025, 1.05]
+
+  @property
+  def transpose_amounts(self):
+    # Transpose no more than a minor third.
+    return [-3, -2, -1, 0, 1, 2, 3]
+
+  @property
+  def has_inputs(self):
+    encoders = self.get_feature_encoders()
+    return ('performance' in encoders) or ('inputs' in encoders)
+
+  def score_encoders(self):
+    return [
+        ('performance', music_encoders.MidiPerformanceEncoder(
+            steps_per_second=100,
+            num_velocity_bins=32,
+            min_pitch=21,
+            max_pitch=108,
+            add_eos=self.add_eos_symbol))
+    ]
+
+### ADDED BY DAVID END
 
 @registry.register_problem('score2perf_maestro_mel_perf_conditional_aug_10x')
 class Score2PerfMaestroMelPerfConditionalAug10x(

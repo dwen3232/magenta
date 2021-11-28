@@ -13,10 +13,52 @@
 # limitations under the License.
 
 """A setuptools based setup module for magenta."""
+import subprocess
+from distutils.command.build import build as _build
 
+import setuptools
 from setuptools import find_packages
 from setuptools import setup
 
+
+class build(_build):  # pylint: disable=invalid-name
+  """A build command class that will be invoked during package install.
+  The package built using the current setup.py will be staged and later
+  installed in the worker using `pip install package'. This class will be
+  instantiated during install for this specific scenario and will trigger
+  running the custom commands specified.
+  """
+  sub_commands = _build.sub_commands + [('CustomCommands', None)]
+
+CUSTOM_COMMANDS = [['sudo', 'apt-get', 'install', '-y', 'build-essential', 'libasound2-dev', 'libjack-dev', 'portaudio19-dev']]
+
+
+class CustomCommands(setuptools.Command):
+  """A setuptools Command class able to run arbitrary commands."""
+  def initialize_options(self):
+    pass
+
+  def finalize_options(self):
+    pass
+
+  def RunCustomCommand(self, command_list):
+    print('Running command: %s' % command_list)
+    p = subprocess.Popen(
+        command_list,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    # Can use communicate(input='y\n'.encode()) if the command run requires
+    # some confirmation.
+    stdout_data, _ = p.communicate()
+    print('Command output: %s' % stdout_data)
+    if p.returncode != 0:
+      raise RuntimeError(
+          'Command %s failed: exit code: %s' % (command_list, p.returncode))
+
+  def run(self):
+    for command in CUSTOM_COMMANDS:
+      self.RunCustomCommand(command)
 # Bit of a hack to parse the version string stored in version.py without
 # executing __init__.py, which will end up requiring a bunch of dependencies to
 # execute (e.g., tensorflow, pretty_midi, etc.).
@@ -25,20 +67,30 @@ with open('magenta/version.py') as in_file:
   exec(in_file.read())  # pylint: disable=exec-used
 
 REQUIRED_PACKAGES = [
-    'absl-py',
+    'wheel',
+    'kfac==0.2.0',
+    'absl-py==0.12.0',
+    'pyparsing==2.4.7',
     'dm-sonnet',
+    # 'numpy==1.20.3',
+    'numpy<1.20.0',
+    'dill==0.3.1.1',
+    # 'typing-extensions==3.10.0.2',
+    'typing-extensions<3.8.0',
+    'bokeh<2.0.0',
+    'google-api-core<2.0.0dev',
     # tensor2tensor has a dependency on dopamine-rl, which we don't use.
     # pin to a version that doesn't require pygame installation because that
     # has too many external non-python dependencies.
     'dopamine-rl <= 3.0.1',
     'imageio',
-    'librosa >= 0.6.2, < 0.8.0',
+    'librosa >= 0.6.2, < 0.7.0',
     'matplotlib >= 1.5.3',
+    # 'matplotlib < 3',
     'mido == 1.2.6',
     'mir_eval >= 0.4',
     'note-seq',
     'numba < 0.50',  # temporary fix for librosa import
-    'numpy',
     'Pillow >= 3.4.2',
     'pretty_midi >= 0.2.6',
     'pygtrie >= 2.3',
@@ -51,14 +103,14 @@ REQUIRED_PACKAGES = [
     'tensor2tensor',
     'tensorflow',
     'tensorflow-datasets',
-    'tensorflow-probability',
+    'tensorflow-probability==0.7.0',
     'tf_slim',
-    'wheel',
 ]
 
 EXTRAS_REQUIRE = {
     'beam': [
-        'apache-beam[gcp] >= 2.14.0',
+        # 'apache-beam[gcp] >= 2.14.0',
+        'apache-beam[gcp]==2.28.0'
     ],
     'onsets_frames_realtime': [
         'pyaudio',
@@ -150,6 +202,7 @@ setup(
     packages=find_packages(),
     install_requires=REQUIRED_PACKAGES,
     extras_require=EXTRAS_REQUIRE,
+    setup_requires=['wheel'],
     entry_points={
         'console_scripts': ['%s = %s:console_entry_point' % (n, p) for n, p in
                             ((s.split('.')[-1], s) for s in CONSOLE_SCRIPTS)],
@@ -159,4 +212,9 @@ setup(
     package_data={
         'magenta': ['models/image_stylization/evaluation_images/*.jpg'],
     },
+    # cmdclass={
+    #     # Command class instantiated and run during pip install scenarios.
+    #     'build': build,
+    #     'CustomCommands': CustomCommands,
+    # }
 )
